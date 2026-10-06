@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gitaarstemmer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#E6ECF1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121A23" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stemmer">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#E6ECF1; --panel:#F6F8FA; --ink:#18222E; --muted:#5A6777; --line:#C6D0DA;
+  --brass:#A67F12; --flat:#2C69AE; --sharp:#BC5A22; --ok:#2B8644; --peg:#FFFFFF;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121A23; --panel:#1A2430; --ink:#E6ECF2; --muted:#98A6B6; --line:#2C3A4A;
+    --brass:#D8B23E; --flat:#6CA3E6; --sharp:#EE8F55; --ok:#4CC26A; --peg:#222E3C;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121A23; --panel:#1A2430; --ink:#E6ECF2; --muted:#98A6B6; --line:#2C3A4A;
+  --brass:#D8B23E; --flat:#6CA3E6; --sharp:#EE8F55; --ok:#4CC26A; --peg:#222E3C;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+main{max-width:520px;margin:0 auto;padding:20px 18px 28px;display:flex;flex-direction:column;gap:22px}
+h1{font-size:1.3rem;font-weight:600;margin:0;letter-spacing:-.01em}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible+.switch{outline:3px solid var(--brass);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Referentiekeuze */
+.mode{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:16px;background:var(--panel);border:1px solid var(--line)}
+.mode button{border:0;background:transparent;border-radius:12px;padding:10px 8px;text-align:center;line-height:1.2}
+.mode button span{display:block;font-weight:600}
+.mode button small{display:block;font-size:.8rem;color:var(--muted);margin-top:2px}
+.mode button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.mode button[aria-pressed="true"] small{color:inherit;opacity:.75}
+.note-ref{font-size:.85rem;color:var(--muted);margin:8px 2px 0;min-height:1.2em}
+
+/* Meter */
+.meter{display:flex;flex-direction:column;align-items:center;gap:4px}
+.meter svg{width:100%;max-width:360px;height:auto;overflow:visible}
+.arc-bg{fill:none;stroke:var(--line);stroke-width:14;stroke-linecap:round}
+.arc-ok{fill:none;stroke:var(--ok);stroke-width:14;opacity:.55}
+.tick{stroke:var(--muted);stroke-width:1.5}
+.tick.major{stroke:var(--ink);stroke-width:2.5}
+.lbl{fill:var(--muted);font-size:15px;font-family:inherit}
+#needle{transform-box:view-box;transform-origin:150px 150px;transition:transform 110ms linear}
+#needle line{stroke:var(--ink);stroke-width:3;stroke-linecap:round}
+#needle circle{fill:var(--ink)}
+.idle #needle{opacity:.25}
+.big{display:flex;align-items:baseline;gap:6px;margin-top:-18px}
+.big b{font-size:clamp(5rem,26vw,7.5rem);font-weight:800;line-height:1;letter-spacing:-.04em;transition:color 150ms}
+.big sub{font-size:1.4rem;font-weight:600;color:var(--muted);vertical-align:baseline}
+.state-flat .big b{color:var(--flat)}
+.state-sharp .big b{color:var(--sharp)}
+.state-ok .big b{color:var(--ok)}
+.status{font-size:1.15rem;font-weight:600;text-align:center;min-height:1.5em;margin:4px 0 0}
+.readout{display:flex;justify-content:center;gap:18px;font-size:.9rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* Snaren */
+.strings{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.peg{position:relative;border:2px solid var(--line);background:var(--peg);border-radius:14px;padding:8px 2px 9px;display:flex;flex-direction:column;align-items:center;gap:1px;min-height:84px}
+.peg .num{font-size:.72rem;color:var(--muted)}
+.peg .let{font-size:1.6rem;font-weight:800;line-height:1.05}
+.peg .hz{font-size:.68rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.peg[aria-pressed="true"]{border-color:var(--brass);box-shadow:inset 0 0 0 1px var(--brass)}
+.peg.done::after{content:"✓";position:absolute;top:3px;right:6px;font-size:.8rem;font-weight:800;color:var(--ok)}
+.peg.done{border-color:var(--ok)}
+.peg.done[aria-pressed="true"]{box-shadow:inset 0 0 0 1px var(--ok)}
+
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+label.auto{display:flex;align-items:center;gap:10px;font-size:.95rem;cursor:pointer}
+label.auto input{position:absolute;opacity:0;width:1px;height:1px}
+.switch{width:44px;height:26px;border-radius:13px;background:var(--line);position:relative;transition:background 150ms;flex:none}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--peg);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform 150ms}
+label.auto input:checked+.switch{background:var(--brass)}
+label.auto input:checked+.switch::after{transform:translateX(18px)}
+.reset{border:0;background:none;color:var(--muted);text-decoration:underline;text-underline-offset:3px;font-size:.9rem;padding:4px}
+
+.go{border:0;border-radius:16px;padding:16px;font-size:1.1rem;font-weight:600;background:var(--brass);color:#fff}
+.go.on{background:var(--panel);color:var(--ink);border:2px solid var(--line)}
+.err{background:var(--panel);border:1px solid var(--sharp);border-radius:12px;padding:12px 14px;font-size:.92rem;line-height:1.45;margin:0}
+.err[hidden]{display:none}
+.lvl{display:flex;align-items:center;gap:10px;width:100%;max-width:360px;margin-top:10px;font-size:.8rem;color:var(--muted)}
+.lvl-track{flex:1;height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.lvl-bar{height:100%;width:0;background:var(--ok);transition:width 60ms linear}
+.lvl.low .lvl-bar{background:var(--muted)}
+.tip{font-size:.85rem;color:var(--muted);line-height:1.45;margin:0}
+
+@media (prefers-reduced-motion: reduce){
+  #needle,.big b,.switch,.switch::after{transition:none}
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Gitaarstemmer</h1>
+    <div style="margin-top:12px">
+      <div class="mode" role="group" aria-label="Stemtoonhoogte">
+        <button type="button" data-ref="440" aria-pressed="true"><span>Standaard</span><small>A = 440 Hz</small></button>
+        <button type="button" data-ref="433" aria-pressed="false"><span>Suzan &amp; Freek</span><small>A = 433 Hz</small></button>
+      </div>
+      <p class="note-ref" id="noteRef"></p>
+    </div>
+  </header>
+
+  <section class="meter idle" id="meter" aria-label="Stemmeter">
+    <svg viewBox="0 0 300 175" aria-hidden="true">
+      <path class="arc-bg" d="M30 150 A120 120 0 0 1 270 150"/>
+      <path class="arc-ok" id="okArc"/>
+      <g id="ticks"></g>
+      <text class="lbl" x="18" y="172" text-anchor="middle">♭</text>
+      <text class="lbl" x="282" y="172" text-anchor="middle">♯</text>
+      <g id="needle"><line x1="150" y1="150" x2="150" y2="38"/><circle cx="150" cy="150" r="7"/></g>
+    </svg>
+    <div class="big"><b id="bigNote">E</b><sub id="bigOct">2</sub></div>
+    <p class="status" id="status">Zet de microfoon aan en tokkel een snaar.</p>
+    <div class="readout"><span id="measured">Gemeten –</span><span id="target">Doel –</span></div>
+    <div class="lvl" id="lvl" aria-hidden="true"><span>Microfoon</span><div class="lvl-track"><div class="lvl-bar" id="lvlBar"></div></div></div>
+  </section>
+  <div class="sr" aria-live="polite" id="live"></div>
+
+  <section aria-label="Snaren">
+    <div class="strings" id="strings"></div>
+    <div class="row" style="margin-top:12px">
+      <label class="auto"><input type="checkbox" id="auto" checked><span class="switch" aria-hidden="true"></span>Snaar automatisch herkennen</label>
+      <button type="button" class="reset" id="reset">Vinkjes wissen</button>
+    </div>
+  </section>
+
+  <button type="button" class="go" id="go">Start stemmen</button>
+  <p class="err" id="err" hidden></p>
+  <p class="tip">Tokkel één snaar tegelijk en demp de andere. Een groen vinkje verschijnt zodra een snaar een moment zuiver blijft.</p>
+</main>
+
+<script>
+(function(){
+  const STRINGS=[
+    {n:6,note:"E",oct:2,midi:40},{n:5,note:"A",oct:2,midi:45},{n:4,note:"D",oct:3,midi:50},
+    {n:3,note:"G",oct:3,midi:55},{n:2,note:"B",oct:3,midi:59},{n:1,note:"E",oct:4,midi:64}
+  ];
+  const IN_TUNE=4;           // cent
+  const HOLD_MS=700;         // zo lang zuiver voor een vinkje
+  const fmt=(v,d=1)=>v.toLocaleString("nl-NL",{minimumFractionDigits:d,maximumFractionDigits:d});
+
+  let ref=440;
+  try{ if(localStorage.getItem("tuner-ref")==="433") ref=433; }catch(e){}
+  let auto=true, selected=0, tuned=new Set();
+  const freqOf=m=>ref*Math.pow(2,(m-69)/12);
+
+  const $=id=>document.getElementById(id);
+  const meter=$("meter"), stringsEl=$("strings"), statusEl=$("status"), liveEl=$("live");
+
+  /* ---------- meter tekenen ---------- */
+  (function drawTicks(){
+    const g=$("ticks"), R=120;
+    for(let c=-50;c<=50;c+=5){
+      const a=c*1.8*Math.PI/180, major=c%25===0;
+      const r1=R-(major?22:14), r2=R-7;
+      const l=document.createElementNS("http://www.w3.org/2000/svg","line");
+      l.setAttribute("x1",150+r1*Math.sin(a)); l.setAttribute("y1",150-r1*Math.cos(a));
+      l.setAttribute("x2",150+r2*Math.sin(a)); l.setAttribute("y2",150-r2*Math.cos(a));
+      l.setAttribute("class","tick"+(major?" major":""));
+      g.appendChild(l);
+    }
+    const a=IN_TUNE*1.8*Math.PI/180;
+    $("okArc").setAttribute("d",`M${150-R*Math.sin(a)} ${150-R*Math.cos(a)} A${R} ${R} 0 0 1 ${150+R*Math.sin(a)} ${150-R*Math.cos(a)}`);
+  })();
+  function setNeedle(c){
+    const cl=Math.max(-50,Math.min(50,c));
+    $("needle").style.transform=`rotate(${cl*1.8}deg)`;
+  }
+
+  /* ---------- UI ---------- */
+  function renderMode(){
+    document.querySelectorAll(".mode button").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.ref===ref)));
+    $("noteRef").textContent = ref===433
+      ? "Alles klinkt ongeveer 28 cent lager, zoals op de opname van ‘Niemand’."
+      : "Gewone stemming, zoals bij vrijwel alle muziek.";
+  }
+  function renderStrings(){
+    stringsEl.innerHTML="";
+    STRINGS.forEach((s,i)=>{
+      const b=document.createElement("button");
+      b.type="button"; b.className="peg"+(tuned.has(i)?" done":"");
+      b.setAttribute("aria-pressed",String(i===selected));
+      b.setAttribute("aria-label",`Snaar ${s.n}, ${s.note}${s.oct}, ${fmt(freqOf(s.midi))} hertz${tuned.has(i)?", gestemd":""}`);
+      b.innerHTML=`<span class="num">${s.n}</span><span class="let">${s.note}</span><span class="hz">${fmt(freqOf(s.midi))}</span>`;
+      b.addEventListener("click",()=>{ selected=i; auto=false; $("auto").checked=false; renderStrings(); renderTarget(); });
+      stringsEl.appendChild(b);
+    });
+  }
+  function renderTarget(){
+    const s=STRINGS[selected];
+    $("bigNote").textContent=s.note; $("bigOct").textContent=s.oct;
+    $("target").textContent=`Doel ${fmt(freqOf(s.midi))} Hz`;
+  }
+  let lastLive="";
+  function say(text,cls){
+    statusEl.textContent=text;
+    meter.classList.remove("state-flat","state-sharp","state-ok");
+    if(cls) meter.classList.add(cls);
+    if(text!==lastLive){ lastLive=text; liveEl.textContent=text; }
+  }
+
+  document.querySelectorAll(".mode button").forEach(b=>b.addEventListener("click",()=>{
+    ref=+b.dataset.ref;
+    try{ localStorage.setItem("tuner-ref",String(ref)); }catch(e){}
+    tuned.clear(); renderMode(); renderStrings(); renderTarget();
+  }));
+  $("auto").addEventListener("change",e=>{ auto=e.target.checked; });
+  $("reset").addEventListener("click",()=>{ tuned.clear(); renderStrings(); });
+
+  /* ---------- toonhoogtedetectie (YIN) ---------- */
+  function detect(buf,sr){
+    let rms=0; for(let i=0;i<buf.length;i++) rms+=buf[i]*buf[i];
+    rms=Math.sqrt(rms/buf.length);
+    lastRms=rms;
+    if(rms<0.002) return -1;
+    const minTau=Math.floor(sr/1000);
+    const maxTau=Math.min(Math.floor(sr/60),Math.floor(buf.length/2));
+    const W=buf.length-maxTau;
+    const d=new Float32Array(maxTau+1);
+    for(let tau=1;tau<=maxTau;tau++){
+      let s=0;
+      for(let i=0;i<W;i++){ const x=buf[i]-buf[i+tau]; s+=x*x; }
+      d[tau]=s;
+    }
+    const c=new Float32Array(maxTau+1); c[0]=1; let run=0;
+    for(let tau=1;tau<=maxTau;tau++){ run+=d[tau]; c[tau]=run===0?1:d[tau]*tau/run; }
+    let tau=-1;
+    for(let t=minTau;t<maxTau;t++){
+      if(c[t]<0.15){ while(t+1<maxTau && c[t+1]<c[t]) t++; tau=t; break; }
+    }
+    if(tau<0) return -1;
+    let best=tau;
+    if(tau>1 && tau<maxTau){
+      const s0=c[tau-1],s1=c[tau],s2=c[tau+1], den=2*(2*s1-s2-s0);
+      if(den!==0) best=tau+(s2-s0)/den;
+    }
+    return sr/best;
+  }
+
+  /* ---------- audio ---------- */
+  let ctx=null, analyser=null, stream=null, buf=null, raf=0, running=false;
+  let lastRms=0, wakeLock=null;
+  async function keepAwake(){
+    try{ if("wakeLock" in navigator) wakeLock=await navigator.wakeLock.request("screen"); }catch(e){}
+  }
+  document.addEventListener("visibilitychange",()=>{ if(running && document.visibilityState==="visible") keepAwake(); });
+  let hist=[], lastPitchAt=0, lastRun=0, inTuneSince=null;
+
+  async function start(){
+    $("err").hidden=true;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      return showError("Deze browser geeft geen toegang tot de microfoon. Open de stemmer in een recente versie van Chrome, Firefox, Edge of Safari.");
+    }
+    // AudioContext direct bij de klik aanmaken, anders start de browser hem soms 'gepauzeerd'
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    try{ await ctx.resume(); }catch(e){}
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    }catch(err){
+      try{ ctx.close(); }catch(e){} ctx=null;
+      if(err && (err.name==="NotAllowedError"||err.name==="SecurityError"))
+        return showError("De microfoon is geblokkeerd. Geef toestemming via het slot- of microfoonicoon in de adresbalk en klik opnieuw op Start stemmen. Lukt dat hier niet, open de stemmer dan als los bestand in je browser.");
+      if(err && err.name==="NotFoundError") return showError("Er is geen microfoon gevonden. Sluit er een aan of controleer de geluidsinstellingen.");
+      return showError("De microfoon kon niet worden gestart ("+(err&&err.name||"onbekende fout")+").");
+    }
+    if(ctx.state!=="running"){ try{ await ctx.resume(); }catch(e){} }
+    const src=ctx.createMediaStreamSource(stream);
+    analyser=ctx.createAnalyser(); analyser.fftSize=4096;
+    src.connect(analyser);
+    buf=new Float32Array(analyser.fftSize);
+    running=true; hist=[]; lastPitchAt=0;
+    keepAwake();
+    $("go").textContent="Stop"; $("go").classList.add("on");
+    meter.classList.add("idle");
+    say("Tokkel een snaar…");
+    loop();
+  }
+  function stop(){
+    running=false; cancelAnimationFrame(raf);
+    if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; }
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    if(ctx) ctx.close();
+    stream=ctx=analyser=null;
+    $("go").textContent="Start stemmen"; $("go").classList.remove("on");
+    meter.classList.add("idle"); setNeedle(0);
+    $("measured").textContent="Gemeten –";
+    $("lvlBar").style.width="0%";
+    say("Zet de microfoon aan en tokkel een snaar.");
+  }
+  function showError(msg){ const e=$("err"); e.textContent=msg; e.hidden=false; }
+
+  function loop(now){
+    if(!running) return;
+    raf=requestAnimationFrame(loop);
+    if(now && now-lastRun<45) return;
+    lastRun=now||performance.now();
+    analyser.getFloatTimeDomainData(buf);
+    const f=detect(buf,ctx.sampleRate);
+    const lvl=Math.min(1,Math.sqrt(lastRms)*3);
+    $("lvlBar").style.width=(lvl*100).toFixed(0)+"%";
+    $("lvl").classList.toggle("low",lastRms<0.002);
+    const t=performance.now();
+    if(f>0 && f<1000){
+      hist.push(f); if(hist.length>5) hist.shift();
+      lastPitchAt=t;
+      const m=[...hist].sort((a,b)=>a-b)[Math.floor(hist.length/2)];
+      update(m,t);
+    }else if(t-lastPitchAt>1200){
+      hist=[]; inTuneSince=null;
+      meter.classList.add("idle"); setNeedle(0);
+      $("measured").textContent="Gemeten –";
+      say("Tokkel een snaar…");
+    }
+  }
+
+  function update(f,t){
+    if(auto){
+      let bi=0,bd=Infinity;
+      STRINGS.forEach((s,i)=>{ const d=Math.abs(1200*Math.log2(f/freqOf(s.midi))); if(d<bd){bd=d;bi=i;} });
+      if(bi!==selected){ selected=bi; renderStrings(); renderTarget(); inTuneSince=null; }
+    }
+    const target=freqOf(STRINGS[selected].midi);
+    const c=1200*Math.log2(f/target);
+    meter.classList.remove("idle");
+    setNeedle(c);
+    $("measured").textContent=`Gemeten ${fmt(f)} Hz`;
+    const sign=c>0?"+":"";
+    if(Math.abs(c)<=IN_TUNE){
+      say(`Gestemd (${sign}${fmt(c,0)} cent)`,"state-ok");
+      if(inTuneSince===null) inTuneSince=t;
+      else if(t-inTuneSince>HOLD_MS && !tuned.has(selected)){ tuned.add(selected); renderStrings(); }
+    }else{
+      inTuneSince=null;
+      if(c<0) say(c<-50 ? "Veel te laag: draai de snaar flink strakker" : `Te laag: draai iets strakker (${fmt(c,0)} cent)`,"state-flat");
+      else    say(c>50  ? "Veel te hoog: draai de snaar flink losser"  : `Te hoog: draai iets losser (+${fmt(c,0)} cent)`,"state-sharp");
+    }
+  }
+
+  $("go").addEventListener("click",()=>running?stop():start());
+
+  renderMode(); renderStrings(); renderTarget();
+
+  if("serviceWorker" in navigator && location.protocol==="https:"){
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>
