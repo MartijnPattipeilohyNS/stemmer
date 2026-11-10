@@ -51,10 +51,10 @@ button:focus-visible,input:focus-visible+.switch{outline:3px solid var(--brass);
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* Referentiekeuze */
-.mode{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:16px;background:var(--panel);border:1px solid var(--line)}
-.mode button{border:0;background:transparent;border-radius:12px;padding:10px 8px;text-align:center;line-height:1.2}
+.mode{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:16px;background:var(--panel);border:1px solid var(--line)}
+.mode button{border:0;background:transparent;border-radius:12px;padding:10px 4px;text-align:center;line-height:1.2;display:flex;flex-direction:column;justify-content:flex-end}
 .mode button span{display:block;font-weight:600}
-.mode button small{display:block;font-size:.8rem;color:var(--muted);margin-top:2px}
+.mode button small{display:block;font-size:.72rem;color:var(--muted);margin-top:3px;white-space:nowrap}
 .mode button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .mode button[aria-pressed="true"] small{color:inherit;opacity:.75}
 .note-ref{font-size:.85rem;color:var(--muted);margin:8px 2px 0;min-height:1.2em}
@@ -120,9 +120,10 @@ label.auto input:checked+.switch::after{transform:translateX(18px)}
   <header>
     <h1>Gitaarstemmer</h1>
     <div style="margin-top:12px">
-      <div class="mode" role="group" aria-label="Stemtoonhoogte">
-        <button type="button" data-ref="440" aria-pressed="true"><span>Standaard</span><small>A = 440 Hz</small></button>
-        <button type="button" data-ref="433" aria-pressed="false"><span>Suzan &amp; Freek</span><small>A = 433 Hz</small></button>
+      <div class="mode" role="group" aria-label="Stemming">
+        <button type="button" data-mode="std" aria-pressed="true"><span>Standaard</span><small>E A D G B E</small></button>
+        <button type="button" data-mode="sf" aria-pressed="false"><span>Suzan &amp; Freek</span><small>E A D G B E</small></button>
+        <button type="button" data-mode="half" aria-pressed="false"><span>Halve toon lager</span><small>E♭ A♭ D♭ G♭ B♭ E♭</small></button>
       </div>
       <p class="note-ref" id="noteRef"></p>
     </div>
@@ -160,17 +161,26 @@ label.auto input:checked+.switch::after{transform:translateX(18px)}
 <script>
 (function(){
   const STRINGS=[
-    {n:6,note:"E",oct:2,midi:40},{n:5,note:"A",oct:2,midi:45},{n:4,note:"D",oct:3,midi:50},
-    {n:3,note:"G",oct:3,midi:55},{n:2,note:"B",oct:3,midi:59},{n:1,note:"E",oct:4,midi:64}
+    {n:6,note:"E",flat:"E♭",oct:2,midi:40},{n:5,note:"A",flat:"A♭",oct:2,midi:45},{n:4,note:"D",flat:"D♭",oct:3,midi:50},
+    {n:3,note:"G",flat:"G♭",oct:3,midi:55},{n:2,note:"B",flat:"B♭",oct:3,midi:59},{n:1,note:"E",flat:"E♭",oct:4,midi:64}
   ];
   const IN_TUNE=4;           // cent
   const HOLD_MS=700;         // zo lang zuiver voor een vinkje
   const fmt=(v,d=1)=>v.toLocaleString("nl-NL",{minimumFractionDigits:d,maximumFractionDigits:d});
 
-  let ref=440;
-  try{ if(localStorage.getItem("tuner-ref")==="433") ref=433; }catch(e){}
+  const MODES={ std:{ref:440,shift:0}, sf:{ref:433,shift:0}, half:{ref:440,shift:-1} };
+  let mode="std";
+  try{
+    const m=localStorage.getItem("tuner-mode");
+    if(MODES[m]) mode=m;
+    else if(localStorage.getItem("tuner-shift")==="-1") mode="half";   // keuze uit vorige versie
+    else if(localStorage.getItem("tuner-ref")==="433") mode="sf";
+  }catch(e){}
+  let ref=MODES[mode].ref, shift=MODES[mode].shift;   // shift: 0 = normaal, -1 = halve toon lager
   let auto=true, selected=0, tuned=new Set();
   const freqOf=m=>ref*Math.pow(2,(m-69)/12);
+  const tm=s=>s.midi+shift;                    // doeltoon van een snaar
+  const nm=s=>shift ? s.flat : s.note;         // naam van die toon
 
   const $=id=>document.getElementById(id);
   const meter=$("meter"), stringsEl=$("strings"), statusEl=$("status"), liveEl=$("live");
@@ -197,10 +207,12 @@ label.auto input:checked+.switch::after{transform:translateX(18px)}
 
   /* ---------- UI ---------- */
   function renderMode(){
-    document.querySelectorAll(".mode button").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.ref===ref)));
-    $("noteRef").textContent = ref===433
-      ? "Alles klinkt ongeveer 28 cent lager, zoals op de opname van ‘Niemand’."
-      : "Gewone stemming, zoals bij vrijwel alle muziek.";
+    document.querySelectorAll(".mode button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.mode===mode)));
+    $("noteRef").textContent={
+      std:"Gewone stemming, zoals bij vrijwel alle muziek.",
+      sf:"Alles klinkt ongeveer 28 cent lager, zoals op de opname van ‘Niemand’.",
+      half:"Alle snaren een halve toon lager. Je speelt dezelfde grepen, maar alles klinkt een halve toon lager."
+    }[mode];
   }
   function renderStrings(){
     stringsEl.innerHTML="";
@@ -208,16 +220,16 @@ label.auto input:checked+.switch::after{transform:translateX(18px)}
       const b=document.createElement("button");
       b.type="button"; b.className="peg"+(tuned.has(i)?" done":"");
       b.setAttribute("aria-pressed",String(i===selected));
-      b.setAttribute("aria-label",`Snaar ${s.n}, ${s.note}${s.oct}, ${fmt(freqOf(s.midi))} hertz${tuned.has(i)?", gestemd":""}`);
-      b.innerHTML=`<span class="num">${s.n}</span><span class="let">${s.note}</span><span class="hz">${fmt(freqOf(s.midi))}</span>`;
+      b.setAttribute("aria-label",`Snaar ${s.n}, ${nm(s).replace("♭"," mol")}${s.oct}, ${fmt(freqOf(tm(s)))} hertz${tuned.has(i)?", gestemd":""}`);
+      b.innerHTML=`<span class="num">${s.n}</span><span class="let">${nm(s)}</span><span class="hz">${fmt(freqOf(tm(s)))}</span>`;
       b.addEventListener("click",()=>{ selected=i; auto=false; $("auto").checked=false; renderStrings(); renderTarget(); });
       stringsEl.appendChild(b);
     });
   }
   function renderTarget(){
     const s=STRINGS[selected];
-    $("bigNote").textContent=s.note; $("bigOct").textContent=s.oct;
-    $("target").textContent=`Doel ${fmt(freqOf(s.midi))} Hz`;
+    $("bigNote").textContent=nm(s); $("bigOct").textContent=s.oct;
+    $("target").textContent=`Doel ${fmt(freqOf(tm(s)))} Hz`;
   }
   let lastLive="";
   function say(text,cls){
@@ -228,8 +240,8 @@ label.auto input:checked+.switch::after{transform:translateX(18px)}
   }
 
   document.querySelectorAll(".mode button").forEach(b=>b.addEventListener("click",()=>{
-    ref=+b.dataset.ref;
-    try{ localStorage.setItem("tuner-ref",String(ref)); }catch(e){}
+    mode=b.dataset.mode; ref=MODES[mode].ref; shift=MODES[mode].shift;
+    try{ localStorage.setItem("tuner-mode",mode); }catch(e){}
     tuned.clear(); renderMode(); renderStrings(); renderTarget();
   }));
   $("auto").addEventListener("change",e=>{ auto=e.target.checked; });
@@ -344,10 +356,10 @@ label.auto input:checked+.switch::after{transform:translateX(18px)}
   function update(f,t){
     if(auto){
       let bi=0,bd=Infinity;
-      STRINGS.forEach((s,i)=>{ const d=Math.abs(1200*Math.log2(f/freqOf(s.midi))); if(d<bd){bd=d;bi=i;} });
+      STRINGS.forEach((s,i)=>{ const d=Math.abs(1200*Math.log2(f/freqOf(tm(s)))); if(d<bd){bd=d;bi=i;} });
       if(bi!==selected){ selected=bi; renderStrings(); renderTarget(); inTuneSince=null; }
     }
-    const target=freqOf(STRINGS[selected].midi);
+    const target=freqOf(tm(STRINGS[selected]));
     const c=1200*Math.log2(f/target);
     meter.classList.remove("idle");
     setNeedle(c);
